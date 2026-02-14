@@ -86,7 +86,7 @@ class ArtifactCache:
         """
         result_json = json.dumps(result)
         size_bytes = len(result_json.encode("utf-8"))
-        now = int(time.time())
+        now = int(time.time() * 1000000)  # Microseconds for better precision
 
         with self._lock:
             with self._get_connection() as conn:
@@ -120,7 +120,7 @@ class ArtifactCache:
         Returns:
             Cached result dictionary, or None if not found
         """
-        now = int(time.time())
+        now = int(time.time() * 1000000)  # Microseconds for better precision
 
         with self._lock:
             with self._get_connection() as conn:

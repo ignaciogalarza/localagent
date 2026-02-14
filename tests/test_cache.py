@@ -85,25 +85,30 @@ class TestArtifactCache:
         """LRU eviction when cache exceeds size limit."""
         cache = ArtifactCache(db_path=cache_db_path, max_entries=3)
 
-        # Add 3 entries
-        cache.store("sha256:hash1" + "0" * 59, {"summary": "one"})
+        # Add 3 entries with proper hash format (sha256: + 64 hex chars)
+        hash1 = "sha256:" + "1" * 64
+        hash2 = "sha256:" + "2" * 64
+        hash3 = "sha256:" + "3" * 64
+        hash4 = "sha256:" + "4" * 64
+
+        cache.store(hash1, {"summary": "one"})
         time.sleep(0.01)
-        cache.store("sha256:hash2" + "0" * 59, {"summary": "two"})
+        cache.store(hash2, {"summary": "two"})
         time.sleep(0.01)
-        cache.store("sha256:hash3" + "0" * 59, {"summary": "three"})
+        cache.store(hash3, {"summary": "three"})
 
         # Access hash1 to make it recently used
-        cache.get("sha256:hash1" + "0" * 59)
+        cache.get(hash1)
         time.sleep(0.01)
 
         # Add 4th entry, should evict hash2 (LRU)
-        cache.store("sha256:hash4" + "0" * 59, {"summary": "four"})
+        cache.store(hash4, {"summary": "four"})
 
         # hash2 should be evicted
-        assert cache.get("sha256:hash2" + "0" * 59) is None
-        # hash1 and hash3 should still exist
-        assert cache.get("sha256:hash1" + "0" * 59) is not None
-        assert cache.get("sha256:hash4" + "0" * 59) is not None
+        assert cache.get(hash2) is None
+        # hash1 and hash4 should still exist
+        assert cache.get(hash1) is not None
+        assert cache.get(hash4) is not None
 
     def test_cache_stats(self, cache_db_path):
         """Stats track hits and misses."""

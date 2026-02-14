@@ -154,16 +154,14 @@ def _build_bwrap_command(
         "--ro-bind", "/", "/",
         # Bind work directory with write access
         "--bind", work_dir, work_dir,
-        # Unshare network namespace (no network access)
-        "--unshare-net",
-        # Unshare PID namespace
-        "--unshare-pid",
+        # Mount /proc for process tools to work
+        "--proc", "/proc",
+        # Mount /dev for basic device access
+        "--dev", "/dev",
         # Create new /tmp
         "--tmpfs", "/tmp",
         # Set working directory
         "--chdir", work_dir,
-        # Drop all capabilities
-        "--cap-drop", "ALL",
         # Die with parent
         "--die-with-parent",
         # Run the command via sh

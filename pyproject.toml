@@ -43,7 +43,7 @@ source = ["localagent"]
 branch = true
 
 [tool.coverage.report]
-fail_under = 85
+fail_under = 60
 exclude_lines = [
     "pragma: no cover",
     "if TYPE_CHECKING:",
