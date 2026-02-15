@@ -136,27 +136,21 @@ pytest -v
 
 ## New Project Setup
 
-Complete setup for a new project:
-
 ```bash
 cd ~/dev/myproject
 python3 -m venv .venv && source .venv/bin/activate
-pip install git+https://github.com/ignaciogalarza/localagent.git
+pip install --no-cache-dir git+https://github.com/ignaciogalarza/localagent.git
 localagent init
+# Restart Claude Code
 ```
-
-Then restart Claude Code to load the MCP tools.
 
 ## Updating
 
-Update LocalAgent in an existing project:
-
 ```bash
-pip install --upgrade git+https://github.com/ignaciogalarza/localagent.git
+pip install --force-reinstall --no-cache-dir git+https://github.com/ignaciogalarza/localagent.git
 localagent init --force
+# Restart Claude Code
 ```
-
-The `--force` flag updates the CLAUDE.md instructions to the latest version.
 
 ## License
 
