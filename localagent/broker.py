@@ -56,7 +56,7 @@ def _dispatch_file_scanner(
 ) -> DelegationResponse:
     """Dispatch to file_scanner subagent."""
     patterns = []
-    root_dir = str(Path.cwd())
+    root_dir = request.root_dir or str(Path.cwd())
 
     for ref in request.input_refs:
         if ref.type == InputRefType.GLOB:

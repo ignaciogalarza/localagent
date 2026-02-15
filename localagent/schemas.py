@@ -71,6 +71,10 @@ class DelegationRequest(BaseModel):
         default_factory=list,
         description="Input references (patterns, hashes, or content)",
     )
+    root_dir: str | None = Field(
+        default=None,
+        description="Root directory for file operations (defaults to cwd)",
+    )
     max_summary_tokens: int = Field(
         default=200,
         ge=50,

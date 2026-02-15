@@ -18,6 +18,7 @@ async def scan_files(patterns: list[str], root: str, max_tokens: int = 200) -> d
             "task_id": f"scan-{hash(tuple(patterns)) & 0xFFFFFF:06x}",
             "tool_name": "file_scanner",
             "input_refs": [{"type": "glob", "value": p} for p in patterns],
+            "root_dir": root,
             "max_summary_tokens": max_tokens,
         })
         return r.json()
