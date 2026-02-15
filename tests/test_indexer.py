@@ -62,6 +62,16 @@ class TestExclusions:
         normal_file.touch()
         assert not _should_exclude(normal_file, tmp_path, None)
 
+    def test_excludes_localagent_files(self, tmp_path):
+        """Excludes LocalAgent's own files to avoid self-referential results."""
+        claude_md = tmp_path / "CLAUDE.md"
+        claude_md.touch()
+        assert _should_exclude(claude_md, tmp_path, None)
+
+        mcp_json = tmp_path / ".mcp.json"
+        mcp_json.touch()
+        assert _should_exclude(mcp_json, tmp_path, None)
+
 
 class TestGitignore:
     """Test gitignore parsing."""

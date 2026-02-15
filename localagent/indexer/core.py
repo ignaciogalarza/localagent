@@ -36,6 +36,12 @@ DEFAULT_EXCLUDES = {
     "*.egg-info",
 }
 
+# Files created by LocalAgent - exclude to avoid self-referential search results
+LOCALAGENT_FILES = {
+    "CLAUDE.md",
+    ".mcp.json",
+}
+
 # File extensions for docs vs code collections
 DOC_EXTENSIONS = {".md", ".rst", ".txt", ".adoc"}
 CODE_EXTENSIONS = {
@@ -69,6 +75,10 @@ def _load_gitignore(root: Path) -> pathspec.PathSpec | None:
 
 def _should_exclude(path: Path, root: Path, gitignore: pathspec.PathSpec | None) -> bool:
     """Check if path should be excluded from indexing."""
+    # Skip LocalAgent's own files
+    if path.name in LOCALAGENT_FILES:
+        return True
+
     # Check default excludes
     for part in path.relative_to(root).parts:
         if part in DEFAULT_EXCLUDES:
