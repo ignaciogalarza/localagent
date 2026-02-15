@@ -10,6 +10,9 @@ from localagent.schemas import ResultRef, ResultRefType, ScanResult
 
 logger = logging.getLogger(__name__)
 
+# Default exclusion patterns
+DEFAULT_EXCLUDES = {".venv", "node_modules", "__pycache__", ".git", ".tox", "dist", "build"}
+
 # Binary file detection: check for null bytes in first 8KB
 BINARY_CHECK_SIZE = 8192
 
@@ -25,6 +28,11 @@ def _compute_sha256(content: bytes) -> str:
 def _is_binary(content: bytes) -> bool:
     """Check if content appears to be binary (contains null bytes)."""
     return b"\x00" in content[:BINARY_CHECK_SIZE]
+
+
+def _is_excluded(file_path: Path) -> bool:
+    """Check if file is in an excluded directory."""
+    return any(excl in file_path.parts for excl in DEFAULT_EXCLUDES)
 
 
 def _estimate_tokens(text: str) -> int:
@@ -81,6 +89,9 @@ def scan_files(
     for pattern in patterns:
         for file_path in root.glob(pattern):
             if not file_path.is_file():
+                continue
+
+            if _is_excluded(file_path):
                 continue
 
             try:

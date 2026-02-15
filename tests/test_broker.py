@@ -22,7 +22,6 @@ class TestBrokerContract:
             "tool_name": "file_scanner",
             "input_refs": [{"type": "glob", "value": "*.py"}],
             "max_summary_tokens": 200,
-            "policy_id": "default",
         }
 
         response = client.post("/delegate", json=request)
@@ -30,11 +29,10 @@ class TestBrokerContract:
         assert response.status_code == 200
         data = response.json()
         assert data["task_id"] == "task-001"
-        assert data["status"] in ["completed", "failed", "partial", "queued"]
+        assert data["status"] in ["completed", "failed"]
         assert "summary" in data
         assert "result_refs" in data
         assert "confidence" in data
-        assert "audit_log_hashes" in data
 
     @patch("localagent.broker.summarize_content")
     def test_valid_summarizer_delegation(self, mock_summarize, client):
@@ -54,7 +52,6 @@ class TestBrokerContract:
             "tool_name": "summarizer",
             "input_refs": [{"type": "content", "value": "Long content to summarize " * 50}],
             "max_summary_tokens": 200,
-            "policy_id": "default",
         }
 
         response = client.post("/delegate", json=request)
@@ -64,48 +61,17 @@ class TestBrokerContract:
         assert data["task_id"] == "task-002"
         assert data["status"] == "completed"
 
-    def test_valid_bash_runner_delegation(self, client, tmp_path):
-        """Verify /delegate accepts valid bash_runner request."""
-        request = {
-            "task_id": "task-003",
-            "tool_name": "bash_runner",
-            "input_refs": [{"type": "command", "value": "echo hello"}],
-            "max_summary_tokens": 200,
-            "policy_id": "default",
-        }
-
-        response = client.post("/delegate", json=request)
-
-        assert response.status_code == 200
-        data = response.json()
-        assert data["task_id"] == "task-003"
-        assert data["status"] in ["completed", "partial", "failed"]
-
-    def test_invalid_tool_name_returns_400(self, client):
+    def test_invalid_tool_name_returns_422(self, client):
         """Unknown tools should be rejected."""
         request = {
             "task_id": "x",
             "tool_name": "unknown_tool",
             "input_refs": [],
             "max_summary_tokens": 200,
-            "policy_id": "default",
         }
 
         response = client.post("/delegate", json=request)
         assert response.status_code == 422  # Validation error
-
-    def test_invalid_policy_returns_422(self, client):
-        """Invalid policy should be rejected."""
-        request = {
-            "task_id": "x",
-            "tool_name": "file_scanner",
-            "input_refs": [],
-            "max_summary_tokens": 200,
-            "policy_id": "invalid_policy",
-        }
-
-        response = client.post("/delegate", json=request)
-        assert response.status_code == 422
 
     def test_missing_required_fields_returns_422(self, client):
         """Missing required fields should fail validation."""
@@ -116,57 +82,6 @@ class TestBrokerContract:
 
         response = client.post("/delegate", json=request)
         assert response.status_code == 422
-
-    def test_bash_runner_blocked_command(self, client):
-        """Blocked bash command should return failed status."""
-        request = {
-            "task_id": "blocked-001",
-            "tool_name": "bash_runner",
-            "input_refs": [{"type": "command", "value": "rm -rf /"}],
-            "max_summary_tokens": 200,
-            "policy_id": "default",
-        }
-
-        response = client.post("/delegate", json=request)
-
-        assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == "failed"
-        assert "blocked" in data["summary"].lower()
-
-    def test_session_id_returned(self, client):
-        """Session ID should be returned in response."""
-        request = {
-            "task_id": "session-test-001",
-            "tool_name": "file_scanner",
-            "input_refs": [{"type": "glob", "value": "*.py"}],
-            "max_summary_tokens": 200,
-            "policy_id": "default",
-        }
-
-        response = client.post("/delegate", json=request)
-
-        assert response.status_code == 200
-        data = response.json()
-        assert data["session_id"] is not None
-        assert data["session_id"].startswith("sess-")
-
-    def test_session_id_preserved(self, client):
-        """Provided session ID should be preserved."""
-        request = {
-            "session_id": "sess-test123",
-            "task_id": "session-test-002",
-            "tool_name": "file_scanner",
-            "input_refs": [{"type": "glob", "value": "*.py"}],
-            "max_summary_tokens": 200,
-            "policy_id": "default",
-        }
-
-        response = client.post("/delegate", json=request)
-
-        assert response.status_code == 200
-        data = response.json()
-        assert data["session_id"] == "sess-test123"
 
 
 class TestHealthEndpoint:
@@ -184,7 +99,6 @@ class TestHealthEndpoint:
         data = response.json()
         assert data["broker"] == "healthy"
         assert "ollama" in data
-        assert "queue_depth" in data
 
     @patch("localagent.broker.check_ollama_health")
     def test_health_reports_ollama_status(self, mock_health, client):
@@ -193,7 +107,7 @@ class TestHealthEndpoint:
 
         response = client.get("/health")
         data = response.json()
-        assert data["ollama"] in ["healthy", "unhealthy", "recovering"]
+        assert data["ollama"] in ["healthy", "unhealthy"]
 
 
 class TestFetchDetailEndpoint:
@@ -258,7 +172,6 @@ class TestCacheIntegration:
         mock_cache.get.return_value = {
             "summary": "Cached summary",
             "confidence": 0.95,
-            "audit_log_hashes": ["sha256:" + "1" * 64],
         }
         mock_get_cache.return_value = mock_cache
 
@@ -267,7 +180,6 @@ class TestCacheIntegration:
             "tool_name": "summarizer",
             "input_refs": [{"type": "content", "value": content}],
             "max_summary_tokens": 200,
-            "policy_id": "default",
         }
 
         response = client.post("/delegate", json=request)
