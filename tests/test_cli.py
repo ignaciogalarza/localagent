@@ -391,3 +391,43 @@ class TestInitCommand:
             config = json.loads(Path(".mcp.json").read_text())
             assert "other" in config["mcpServers"]
             assert "localagent" in config["mcpServers"]
+
+    @patch("localagent.indexer.get_indexer")
+    def test_init_force_replaces_section(self, mock_get_indexer, runner, tmp_path):
+        """Init --force replaces existing LocalAgent section."""
+        mock_indexer = MagicMock()
+        mock_indexer.index_directory.return_value = {"indexed": 0, "skipped": 0, "errors": 0}
+        mock_get_indexer.return_value = mock_indexer
+
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            # Create existing CLAUDE.md with old LocalAgent section
+            old_content = """# My Project
+
+Some intro.
+
+# LocalAgent - OLD VERSION
+
+Old smart_search instructions here.
+
+## Old Section
+
+More old stuff.
+
+# Other Section
+
+Keep this.
+"""
+            Path("CLAUDE.md").write_text(old_content)
+
+            result = runner.invoke(init, ["--project", "testproj", "--force", "--no-index"])
+
+            assert result.exit_code == 0
+            assert "Replaced" in result.output
+
+            content = Path("CLAUDE.md").read_text()
+            # New content should be there
+            assert "REQUIRED" in content
+            # Old content should be gone
+            assert "OLD VERSION" not in content
+            # Other sections should remain
+            assert "Other Section" in content

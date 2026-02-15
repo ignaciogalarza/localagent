@@ -255,6 +255,16 @@ summarize_file(path="/path/to/file.py")
 '''
 
 
+def _replace_localagent_section(content: str, new_section: str) -> str:
+    """Replace existing LocalAgent section in CLAUDE.md content."""
+    import re
+    # Match from "# LocalAgent" to the next top-level heading or end of file
+    pattern = r'# LocalAgent[^\n]*\n.*?(?=\n# [^#]|\n#[^#]|\Z)'
+    if re.search(pattern, content, re.DOTALL):
+        return re.sub(pattern, new_section.strip(), content, flags=re.DOTALL)
+    return content
+
+
 @main.command()
 @click.option(
     "--project", "-p",
@@ -266,7 +276,12 @@ summarize_file(path="/path/to/file.py")
     is_flag=True,
     help="Skip initial indexing",
 )
-def init(project: str | None, no_index: bool) -> None:
+@click.option(
+    "--force", "-f",
+    is_flag=True,
+    help="Replace existing LocalAgent section in CLAUDE.md",
+)
+def init(project: str | None, no_index: bool, force: bool) -> None:
     """Initialize LocalAgent in a project.
 
     Creates CLAUDE.md with MCP tool instructions, sets up .mcp.json,
@@ -276,6 +291,7 @@ def init(project: str | None, no_index: bool) -> None:
     Example:
         cd /path/to/myproject
         localagent init
+        localagent init --force    # Update existing LocalAgent section
         localagent init --project myapp --no-index
     """
     import json
@@ -290,8 +306,15 @@ def init(project: str | None, no_index: bool) -> None:
 
     if claude_md_path.exists():
         existing = claude_md_path.read_text()
-        if "LocalAgent" in existing and "smart_search" in existing:
-            click.echo("CLAUDE.md already has LocalAgent instructions, skipping...")
+        has_localagent = "LocalAgent" in existing and "smart_search" in existing
+
+        if has_localagent and force:
+            # Replace existing section
+            updated = _replace_localagent_section(existing, localagent_section)
+            claude_md_path.write_text(updated)
+            click.echo("Replaced LocalAgent section in CLAUDE.md")
+        elif has_localagent:
+            click.echo("CLAUDE.md already has LocalAgent instructions (use --force to replace)")
         else:
             # Append to existing CLAUDE.md
             with open(claude_md_path, "a") as f:
