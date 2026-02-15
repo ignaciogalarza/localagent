@@ -147,6 +147,17 @@ localagent init
 
 Then restart Claude Code to load the MCP tools.
 
+## Updating
+
+Update LocalAgent in an existing project:
+
+```bash
+pip install --upgrade git+https://github.com/ignaciogalarza/localagent.git
+localagent init --force
+```
+
+The `--force` flag updates the CLAUDE.md instructions to the latest version.
+
 ## License
 
 MIT
