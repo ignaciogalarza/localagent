@@ -225,45 +225,79 @@ def delete(project: str) -> None:
 
 
 # Template for CLAUDE.md instructions
-CLAUDE_MD_TEMPLATE = '''# LocalAgent - Semantic Code Search
+CLAUDE_MD_TEMPLATE = '''# LocalAgent - REQUIRED for Code Exploration
 
-This project uses LocalAgent for semantic code search via MCP tools.
+This project uses LocalAgent for semantic code search. You MUST use these tools.
 
-## Available MCP Tools
+## IMPORTANT: Use Tools First, Not File Reading
 
-### `smart_search` - Semantic Code Search
-Search the indexed codebase using natural language. Returns relevant code chunks with AI summaries.
+**DO NOT** scan directories or read multiple files to understand the codebase.
+**DO** use `smart_search` first. It returns exactly what you need in ~100x fewer tokens.
 
+This is a deliberate trade-off: semantic search + summarization is more efficient than reading raw files. Trust the tools.
+
+### Why This Matters
+
+| Approach | Tokens Used | Time |
+|----------|-------------|------|
+| Read files to find auth code | ~100,000 | Slow |
+| `smart_search("authentication")` | ~800 | Fast |
+
+When you read files directly, you waste tokens and context window. The search index already knows where everything is.
+
+## Required Workflow
+
+1. **Need to understand something?** → `smart_search(query="...")`
+2. **Need to find where X is?** → `smart_search(query="where is X implemented")`
+3. **Need project structure?** → `scan_files(patterns=["**/*.py"])`
+4. **Need one specific file?** → `summarize_file(path="...")` or Read tool
+
+Only use the Read tool AFTER you know exactly which file and lines to read.
+
+## MCP Tools
+
+### `smart_search` - Use This First
 ```
-smart_search(query="how does authentication work", project="{project}", top_k=5)
+smart_search(query="how does caching work", project="{project}", top_k=5)
 ```
 
-**Parameters:**
-- `query`: Natural language search (e.g., "database connection", "error handling")
-- `project`: Project name (default: "{project}")
-- `collection`: "docs", "code", or null for both
-- `top_k`: Number of results (default: 5)
+Returns relevant code chunks with file paths, line numbers, and AI summary. Use this for:
+- Understanding how features work
+- Finding where something is implemented
+- Exploring unfamiliar code
+- Answering questions about the codebase
 
-**Use smart_search instead of reading files when exploring code** - it's 99% more token-efficient.
-
-### `scan_files` - File Pattern Scanning
+### `scan_files` - Project Structure
 ```
-scan_files(patterns=["*.py"], root="/path/to/project")
+scan_files(patterns=["*.py", "*.ts"], root="{root}")
 ```
 
-### `summarize_file` - Single File Summary
+Returns file list with summary. Use for understanding project layout.
+
+### `summarize_file` - Single File Overview
 ```
 summarize_file(path="/absolute/path/to/file.py")
 ```
 
-## Quick Reference
+Returns AI summary of one file. Use when you need to understand a specific file.
 
-| Task | Tool |
-|------|------|
-| Find where X is implemented | `smart_search(query="X implementation")` |
-| Understand how Y works | `smart_search(query="how does Y work")` |
-| List project files | `scan_files(patterns=["**/*.py"])` |
-| Summarize one file | `summarize_file(path="...")` |
+## Examples
+
+| User Request | Correct Action |
+|--------------|----------------|
+| "How does auth work?" | `smart_search(query="authentication implementation")` |
+| "Fix the login bug" | `smart_search(query="login")` then Read specific file |
+| "Add a new endpoint" | `smart_search(query="API endpoints")` to find patterns first |
+| "What's in this project?" | `scan_files` + `smart_search(query="project overview")` |
+
+## DO NOT
+
+- Read all files in a directory to "explore"
+- Use Glob/Grep extensively before trying smart_search
+- Skip the tools because you "want to see the raw code"
+- Ignore these instructions
+
+The tools exist to make you faster and more efficient. Use them.
 '''
 
 
@@ -298,7 +332,7 @@ def init(project: str | None, no_index: bool) -> None:
 
     # 1. Create/update CLAUDE.md
     claude_md_path = cwd / "CLAUDE.md"
-    localagent_section = CLAUDE_MD_TEMPLATE.format(project=project_name)
+    localagent_section = CLAUDE_MD_TEMPLATE.format(project=project_name, root=str(cwd))
 
     if claude_md_path.exists():
         existing = claude_md_path.read_text()
