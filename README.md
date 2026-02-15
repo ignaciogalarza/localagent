@@ -134,6 +134,19 @@ pytest -v
 | Understand caching | ~15K tokens | ~400 tokens | 97% |
 | Explore new codebase | ~50K tokens | ~600 tokens | 99% |
 
+## New Project Setup
+
+Complete setup for a new project:
+
+```bash
+cd ~/dev/myproject
+python3 -m venv .venv && source .venv/bin/activate
+pip install git+https://github.com/ignaciogalarza/localagent.git
+localagent init
+```
+
+Then restart Claude Code to load the MCP tools.
+
 ## License
 
 MIT
