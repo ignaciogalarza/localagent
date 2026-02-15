@@ -8,7 +8,7 @@ Semantic code search with LLM summarization for Claude Code. Index your codebase
 ## Features
 
 - **Smart Search**: Semantic code search using ChromaDB vector embeddings
-- **LLM Summarization**: AI-generated summaries of search results via Ollama
+- **LLM Summarization**: AI-generated summaries of search results via Ollama (optional)
 - **MCP Integration**: Seamless Claude Code integration via Model Context Protocol
 - **Token Efficient**: ~99% reduction compared to reading raw files
 - **Incremental Indexing**: Only re-indexes changed files
@@ -19,50 +19,32 @@ Semantic code search with LLM summarization for Claude Code. Index your codebase
 pip install git+https://github.com/ignaciogalarza/localagent.git
 ```
 
-Or for development:
+This installs all dependencies automatically (ChromaDB, FastAPI, Click, etc.).
+
+### Optional: Ollama for Summarization
+
+For AI-powered search summaries, install [Ollama](https://ollama.ai/):
 
 ```bash
-git clone https://github.com/ignaciogalarza/localagent.git
-cd localagent
-pip install -e ".[dev]"
-```
-
-### Prerequisites
-
-- Python 3.11+
-- [Ollama](https://ollama.ai/) with Mistral model (for summarization)
-
-```bash
-# Install Ollama model
+# macOS/Linux
+curl -fsSL https://ollama.ai/install.sh | sh
 ollama pull mistral:7b-instruct-q4_0
 ```
 
+> **Note**: Smart search works without Ollama - you just won't get AI summaries.
+
 ## Quick Start
 
-### Initialize in Your Project
-
 ```bash
+# 1. Go to your project
 cd /path/to/your/project
+
+# 2. Initialize LocalAgent (creates CLAUDE.md, .mcp.json, indexes project)
 localagent init
-```
 
-This creates:
-- `CLAUDE.md` - Instructions for Claude about available MCP tools
-- `.mcp.json` - MCP server configuration
-- Indexes your project for semantic search
+# 3. Restart Claude Code to load MCP tools
 
-### Restart Claude Code
-
-After running `localagent init`, restart Claude Code to load the MCP tools.
-
-### Use Smart Search
-
-In Claude Code, ask naturally:
-> "Search for how authentication works"
-
-Or use the CLI:
-```bash
-localagent search "authentication implementation"
+# 4. Ask Claude: "search for authentication in myproject"
 ```
 
 ## CLI Commands
@@ -74,27 +56,31 @@ localagent search "query"          # Semantic search
 localagent collections             # List indexed projects
 localagent serve                   # Start HTTP broker
 localagent mcp                     # Run MCP server
+localagent delete <project>        # Delete project index
 ```
 
 ### Examples
 
 ```bash
-# Index a project with custom name
-localagent index --project myapp --dir /path/to/project
+# Index with custom project name
+localagent index --project myapp
 
-# Search with options
-localagent search "database connection" --top-k 10 --type code
+# Search code only
+localagent search "database connection" --type code
+
+# Search with more results
+localagent search "error handling" --top-k 10
+
+# Search without LLM summary (faster, no Ollama needed)
+localagent search "auth" --no-summary
 
 # Force full re-index
 localagent index --full
-
-# Search without LLM summary (faster)
-localagent search "error handling" --no-summary
 ```
 
-## MCP Tools
+## MCP Tools for Claude
 
-When initialized, Claude Code has access to these tools:
+After `localagent init`, Claude Code has access to:
 
 | Tool | Description |
 |------|-------------|
@@ -102,51 +88,42 @@ When initialized, Claude Code has access to these tools:
 | `scan_files` | Glob pattern file scanning |
 | `summarize_file` | Single file summarization |
 
-### smart_search
-
 ```python
-smart_search(
-    query="how does caching work",
-    project="myproject",      # optional
-    collection="code",        # "code", "docs", or None for both
-    top_k=5                   # number of results
-)
+# Example usage in Claude
+smart_search(query="how does caching work", project="myproject", top_k=5)
 ```
 
-## Architecture
+## How It Works
+
+```
+localagent init
+    ├── Creates CLAUDE.md (MCP tool instructions)
+    ├── Creates .mcp.json (MCP server config)
+    └── Indexes project in ChromaDB
+
+localagent search "query"
+    ├── Searches ChromaDB vector embeddings
+    ├── Returns top-k matching code chunks
+    └── Summarizes results via Ollama (if available)
+```
+
+### Data Storage
 
 ```
 ~/.localagent/
-├── chroma/                 # Vector database (ChromaDB)
+├── chroma/                 # Vector database
 │   └── index-manifest.json # File hash tracking
 └── cache/
-    └── cache.db            # Summary cache (SQLite)
+    └── cache.db            # Summary cache
 ```
-
-### Components
-
-- **Indexer**: Chunks code files, stores embeddings in ChromaDB
-- **Smart Searcher**: Queries vectors, summarizes results via Ollama
-- **MCP Server**: Exposes tools to Claude Code
-- **HTTP Broker**: Optional REST API for direct access
 
 ## Development
 
 ```bash
-# Install dev dependencies
+git clone https://github.com/ignaciogalarza/localagent.git
+cd localagent
 pip install -e ".[dev]"
-
-# Run tests
 pytest -v
-
-# Run with coverage
-pytest --cov=localagent
-
-# Linting
-ruff check localagent/
-
-# Type checking
-mypy localagent/
 ```
 
 ## Token Efficiency
