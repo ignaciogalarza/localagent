@@ -1,9 +1,0 @@
-{
-  "mcpServers": {
-    "localagent": {
-      "command": "python",
-      "args": ["-m", "mcp_localagent.server"],
-      "cwd": "/home/ignacio/dev/LocalAgent"
-    }
-  }
-}

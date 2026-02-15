@@ -25,6 +25,7 @@ from localagent.schemas import (
     ToolName,
 )
 from localagent.subagents.file_scanner import scan_files
+from localagent.subagents.smart_searcher import smart_search
 from localagent.subagents.summarizer import (
     check_ollama_health,
     summarize_content,
@@ -83,6 +84,62 @@ def _dispatch_file_scanner(
     )
 
 
+def _dispatch_smart_search(
+    request: DelegationRequest,
+    cache: ArtifactCache,
+) -> DelegationResponse:
+    """Dispatch to smart_search subagent."""
+    query = ""
+    project = "localagent"
+    collection_type = None
+    top_k = 5
+    summarize = True
+
+    for ref in request.input_refs:
+        if ref.type == InputRefType.CONTENT:
+            query = ref.value
+            break
+
+    if not query:
+        return DelegationResponse(
+            task_id=request.task_id,
+            status=TaskStatus.FAILED,
+            summary="No search query provided",
+            result_refs=[],
+            confidence=0.0,
+        )
+
+    result = smart_search(
+        query=query,
+        project_name=project,
+        collection_type=collection_type,
+        top_k=top_k,
+        summarize=summarize,
+        max_summary_tokens=request.max_summary_tokens,
+    )
+
+    # Build summary with match info
+    match_info = []
+    for m in result.matches[:3]:
+        match_info.append(f"{m.file_path}:{m.metadata.get('start_line', '?')}")
+
+    summary = result.summary
+    if match_info:
+        summary = f"Matches: {', '.join(match_info)}. {summary}"
+
+    # Truncate summary if needed
+    if len(summary) > 1500:
+        summary = summary[:1497] + "..."
+
+    return DelegationResponse(
+        task_id=request.task_id,
+        status=TaskStatus.COMPLETED,
+        summary=summary,
+        result_refs=[],  # Could add result refs for match content
+        confidence=result.confidence,
+    )
+
+
 def _dispatch_summarizer(
     request: DelegationRequest,
     cache: ArtifactCache,
@@ -114,10 +171,14 @@ def _dispatch_summarizer(
     cached_result = cache.get(content_hash)
     if cached_result:
         logger.info(f"Cache hit for {request.task_id}")
+        cached_summary = cached_result.get("summary", "")
+        # Truncate to schema limit (1500 chars)
+        if len(cached_summary) > 1500:
+            cached_summary = cached_summary[:1497] + "..."
         return DelegationResponse(
             task_id=request.task_id,
             status=TaskStatus.COMPLETED,
-            summary=cached_result.get("summary", ""),
+            summary=cached_summary,
             result_refs=[
                 ResultRef(
                     type=ResultRefType.CACHE,
@@ -163,6 +224,8 @@ async def delegate(request: DelegationRequest) -> DelegationResponse:
         response = _dispatch_file_scanner(request, cache)
     elif request.tool_name == ToolName.SUMMARIZER:
         response = _dispatch_summarizer(request, cache)
+    elif request.tool_name == ToolName.SMART_SEARCH:
+        response = _dispatch_smart_search(request, cache)
     else:
         raise HTTPException(
             status_code=400,

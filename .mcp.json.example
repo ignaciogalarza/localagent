@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "localagent": {
+      "command": "localagent",
+      "args": ["mcp"]
+    }
+  }
+}

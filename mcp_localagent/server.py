@@ -38,5 +38,38 @@ async def summarize_file(path: str, max_tokens: int = 200) -> dict:
         return r.json()
 
 
+@mcp.tool()
+async def smart_search(
+    query: str,
+    project: str | None = None,
+    collection: str | None = None,
+    top_k: int = 5,
+) -> dict:
+    """Semantic search across indexed codebase with LLM summarization.
+
+    Args:
+        query: Natural language search query
+        project: Project name (defaults to 'localagent')
+        collection: Collection type - 'docs', 'code', or None for both
+        top_k: Number of results to return
+
+    Returns:
+        Search results with matches and AI-generated summary
+    """
+    from localagent.subagents.smart_searcher import smart_search as do_search
+
+    project_name = project or "localagent"
+
+    result = do_search(
+        query=query,
+        project_name=project_name,
+        collection_type=collection,
+        top_k=top_k,
+        summarize=True,
+    )
+
+    return result.model_dump()
+
+
 if __name__ == "__main__":
     mcp.run()

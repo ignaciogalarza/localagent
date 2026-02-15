@@ -1,167 +1,161 @@
 # LocalAgent
 
-A prototype orchestration system where Claude acts as a high-level planner delegating mechanical tasks to local subagents via a minimal HTTP broker.
+Semantic code search with LLM summarization for Claude Code. Index your codebase and search it using natural language queries.
+
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## Features
 
-- **File Scanner**: Glob pattern matching, content extraction, SHA256 hashing
-- **Summarizer**: Content compression using local Mistral-7B via Ollama
-- **Bash Runner**: Sandboxed command execution via bubblewrap
-- **Artifact Cache**: Content-addressable SQLite cache with LRU eviction
-- **Token Efficiency**: ~80% reduction via caching and 200-token summary limits
+- **Smart Search**: Semantic code search using ChromaDB vector embeddings
+- **LLM Summarization**: AI-generated summaries of search results via Ollama
+- **MCP Integration**: Seamless Claude Code integration via Model Context Protocol
+- **Token Efficient**: ~99% reduction compared to reading raw files
+- **Incremental Indexing**: Only re-indexes changed files
 
-## Quick Start
+## Installation
+
+```bash
+pip install git+https://github.com/ignaciogalarza/localagent.git
+```
+
+Or for development:
+
+```bash
+git clone https://github.com/ignaciogalarza/localagent.git
+cd localagent
+pip install -e ".[dev]"
+```
 
 ### Prerequisites
 
 - Python 3.11+
-- [Ollama](https://ollama.ai/) with Mistral-7B model
-- [bubblewrap](https://github.com/containers/bubblewrap) (for sandboxed bash)
-
-### Installation
+- [Ollama](https://ollama.ai/) with Mistral model (for summarization)
 
 ```bash
-# Clone the repository
-git clone https://github.com/yourorg/localagent.git
-cd localagent
-
-# Install dependencies
-pip install -e ".[dev]"
-
-# Pull the Ollama model
+# Install Ollama model
 ollama pull mistral:7b-instruct-q4_0
 ```
 
-### Running the Broker
+## Quick Start
+
+### Initialize in Your Project
 
 ```bash
-# Start Ollama (if not already running)
-ollama serve &
-
-# Start the broker
-uvicorn localagent.broker:app --port 8000
+cd /path/to/your/project
+localagent init
 ```
 
-### Example Usage
+This creates:
+- `CLAUDE.md` - Instructions for Claude about available MCP tools
+- `.mcp.json` - MCP server configuration
+- Indexes your project for semantic search
 
-#### File Scanner
+### Restart Claude Code
+
+After running `localagent init`, restart Claude Code to load the MCP tools.
+
+### Use Smart Search
+
+In Claude Code, ask naturally:
+> "Search for how authentication works"
+
+Or use the CLI:
+```bash
+localagent search "authentication implementation"
+```
+
+## CLI Commands
 
 ```bash
-curl -X POST http://localhost:8000/delegate \
-  -H "Content-Type: application/json" \
-  -d '{
-    "task_id": "scan-001",
-    "tool_name": "file_scanner",
-    "input_refs": [{"type": "glob", "value": "**/*.py"}],
-    "max_summary_tokens": 200,
-    "policy_id": "default"
-  }'
+localagent init                    # Initialize in current project
+localagent index                   # Re-index current project
+localagent search "query"          # Semantic search
+localagent collections             # List indexed projects
+localagent serve                   # Start HTTP broker
+localagent mcp                     # Run MCP server
 ```
 
-#### Summarizer
+### Examples
 
 ```bash
-curl -X POST http://localhost:8000/delegate \
-  -H "Content-Type: application/json" \
-  -d '{
-    "task_id": "sum-001",
-    "tool_name": "summarizer",
-    "input_refs": [{"type": "content", "value": "Long content to summarize..."}],
-    "max_summary_tokens": 200,
-    "policy_id": "default"
-  }'
+# Index a project with custom name
+localagent index --project myapp --dir /path/to/project
+
+# Search with options
+localagent search "database connection" --top-k 10 --type code
+
+# Force full re-index
+localagent index --full
+
+# Search without LLM summary (faster)
+localagent search "error handling" --no-summary
 ```
 
-#### Bash Runner
+## MCP Tools
 
-```bash
-curl -X POST http://localhost:8000/delegate \
-  -H "Content-Type: application/json" \
-  -d '{
-    "task_id": "bash-001",
-    "tool_name": "bash_runner",
-    "input_refs": [{"type": "command", "value": "ls -la"}],
-    "max_summary_tokens": 200,
-    "policy_id": "readonly"
-  }'
-```
+When initialized, Claude Code has access to these tools:
 
-#### Health Check
+| Tool | Description |
+|------|-------------|
+| `smart_search` | Semantic search with AI summaries |
+| `scan_files` | Glob pattern file scanning |
+| `summarize_file` | Single file summarization |
 
-```bash
-curl http://localhost:8000/health
-```
+### smart_search
 
-## API Reference
-
-### POST /delegate
-
-Delegate a task to a subagent.
-
-**Request Body:**
-```json
-{
-  "task_id": "string",
-  "tool_name": "file_scanner|summarizer|bash_runner",
-  "input_refs": [{"type": "glob|content|command|hash", "value": "string"}],
-  "max_summary_tokens": 200,
-  "policy_id": "default|readonly|build",
-  "session_id": "optional-session-id"
-}
-```
-
-**Response:**
-```json
-{
-  "task_id": "string",
-  "status": "completed|failed|partial|queued",
-  "summary": "string (≤200 tokens)",
-  "result_refs": [{"type": "file|cache|memory", "hash": "sha256:...", "path": "..."}],
-  "confidence": 0.0-1.0,
-  "audit_log_hashes": ["sha256:..."],
-  "session_id": "string"
-}
-```
-
-### POST /fetch_detail
-
-Fetch full content for a result reference (hybrid delegation).
-
-### GET /health
-
-Check broker and dependency health.
-
-## Policies
-
-| Policy | Concurrency | Bash Commands |
-|--------|-------------|---------------|
-| `default` | Parallel (4) | Read-only: grep, cat, ls, find, etc. |
-| `readonly` | Parallel (4) | Read-only commands only |
-| `build` | Sequential | Read-only + make, npm run, pytest, etc. |
-
-## Development
-
-```bash
-# Run tests
-pytest -v
-
-# Run with coverage
-pytest --cov=localagent --cov-report=term-missing
-
-# Run linting
-ruff check localagent/
-
-# Run type checking
-mypy localagent/
+```python
+smart_search(
+    query="how does caching work",
+    project="myproject",      # optional
+    collection="code",        # "code", "docs", or None for both
+    top_k=5                   # number of results
+)
 ```
 
 ## Architecture
 
-See [docs/adr-001-architecture.md](docs/adr-001-architecture.md) for detailed architecture decisions.
+```
+~/.localagent/
+├── chroma/                 # Vector database (ChromaDB)
+│   └── index-manifest.json # File hash tracking
+└── cache/
+    └── cache.db            # Summary cache (SQLite)
+```
 
-## Security
+### Components
 
-See [docs/bash-runner-security.md](docs/bash-runner-security.md) for bash runner security model.
+- **Indexer**: Chunks code files, stores embeddings in ChromaDB
+- **Smart Searcher**: Queries vectors, summarizes results via Ollama
+- **MCP Server**: Exposes tools to Claude Code
+- **HTTP Broker**: Optional REST API for direct access
+
+## Development
+
+```bash
+# Install dev dependencies
+pip install -e ".[dev]"
+
+# Run tests
+pytest -v
+
+# Run with coverage
+pytest --cov=localagent
+
+# Linting
+ruff check localagent/
+
+# Type checking
+mypy localagent/
+```
+
+## Token Efficiency
+
+| Scenario | Raw Read | Smart Search | Savings |
+|----------|----------|--------------|---------|
+| Find auth code (500 files) | ~100K tokens | ~800 tokens | 99% |
+| Understand caching | ~15K tokens | ~400 tokens | 97% |
+| Explore new codebase | ~50K tokens | ~600 tokens | 99% |
 
 ## License
 

@@ -1,69 +1,90 @@
 # ADR-001: LocalAgent Architecture
 
 ## Status
-Accepted
+Accepted (Updated Feb 2026 - Smart Search)
 
 ## Context
-We need a system where Claude acts as a high-level planner delegating mechanical tasks to local subagents. The system must prioritize token efficiency, safety, and single-developer laptop deployment.
+We need a system where Claude delegates mechanical tasks (file scanning, semantic search, summarization) to local subagents. The system must prioritize token efficiency and single-developer laptop deployment.
 
 ## Decision
 
-### Architecture: Subprocess Pool with Shared Memory
+### Architecture: Lean HTTP Broker + Semantic Search
 
-**Selected Option**: Central Python broker spawns subagent workers as subprocesses. SQLite for task/cache persistence. Ollama runs as separate daemon for 7B model.
+**Selected Option**: Minimal Python broker exposes three subagents via HTTP. ChromaDB for vector search. SQLite for cache. Ollama for LLM summarization.
 
 **Rationale**:
-- Process isolation without container overhead
-- Zero external dependencies (no Redis)
-- SQLite provides durability + easy debugging
+- Maximum token efficiency (~99% reduction vs reading files)
+- Semantic search enables natural language code exploration
+- SQLite + ChromaDB provide local persistence
 - Ollama manages model lifecycle cleanly
 
-### Key Components
+### Components
 
-1. **HTTP Broker** (FastAPI on localhost:8000)
-   - Receives delegation requests via `/delegate` endpoint
-   - Routes to appropriate subagent
-   - Manages session state and caching
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Claude (Orchestrator)                     │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                   LocalAgent MCP Server                      │
+│  Tools: scan_files, summarize_file, smart_search            │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                      HTTP Broker (:8000)                     │
+│  Dispatches to: file_scanner, summarizer, smart_searcher    │
+└─────────────────────────────────────────────────────────────┘
+           │                    │                    │
+           ▼                    ▼                    ▼
+    ┌──────────┐         ┌──────────┐         ┌──────────────┐
+    │ Scanner  │         │Summarizer│         │Smart Searcher│
+    │(pathlib) │         │ (Ollama) │         │  (ChromaDB)  │
+    └──────────┘         └──────────┘         └──────────────┘
+                              │                       │
+                              ▼                       ▼
+                         ┌────────┐            ┌──────────┐
+                         │ Ollama │            │ ChromaDB │
+                         └────────┘            └──────────┘
+```
 
-2. **Subagents**
-   - `file_scanner`: Glob patterns, content extraction, SHA256 hashing
-   - `summarizer`: Ollama integration for content compression
-   - `bash_runner`: Sandboxed command execution via bubblewrap
+### Subagents
 
-3. **Artifact Cache** (SQLite)
-   - Content-addressable storage
-   - LRU eviction (max 1000 entries)
-   - Shared across all subagents
+1. **file_scanner**: Glob patterns, SHA256 hashing, file listing
+2. **summarizer**: Ollama integration for content compression
+3. **smart_searcher**: ChromaDB vector search + Ollama summarization
+
+### Storage
+
+```
+~/.localagent/
+├── chroma/                 # Vector embeddings (ChromaDB)
+│   └── index-manifest.json # File hash tracking for incremental updates
+└── cache/
+    └── cache.db            # Summary cache (SQLite, LRU eviction)
+```
 
 ### Design Decisions
 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
-| Local LLM | Mistral-7B-Q4 via Ollama | Good quality/speed balance |
-| Sandbox | bubblewrap (bwrap) | Lightweight, no root needed |
+| Vector DB | ChromaDB | Simple, embedded, good embeddings |
+| Local LLM | Mistral-7B via Ollama | Good quality/speed for summarization |
 | Transport | HTTP localhost:8000 | Easy debugging with curl |
-| Delegation | Hybrid (Eager + Lazy) | Summary always returned, fetch_detail on demand |
-| Confidence | LLM self-assessment | 7B model rates its own confidence (0-1) |
-| Session Context | Narrow stateful tracking | ≤200 token summary, no raw artifacts |
+| Indexing | Incremental via SHA256 manifest | Only re-index changed files |
+| Chunking | 200 lines, 50-line overlap | Balance between context and granularity |
 
 ## Consequences
 
 ### Positive
-- ~80% token savings via aggressive caching + pointer refs
-- Safe bash execution via bubblewrap sandbox
-- Easy local development and debugging
-- No external service dependencies
+- ~99% token savings vs reading raw files
+- Natural language code search
+- Simple codebase (~1200 lines)
+- Easy local development
+- No external service dependencies (all local)
 
 ### Negative
-- Unix-only for some optimizations (bubblewrap)
-- Shared memory requires careful lifecycle management
-- Single-machine deployment only
-
-### Risks and Mitigations
-- **Risk**: Shared memory leaks if subagent crashes
-- **Mitigation**: Broker tracks all shared memory blocks; cleanup on task timeout
-
-## References
-- [Bubblewrap](https://github.com/containers/bubblewrap)
-- [Ollama](https://ollama.ai/)
-- [FastAPI](https://fastapi.tiangolo.com/)
+- Requires Ollama for summarization (graceful fallback exists)
+- Initial indexing takes a few seconds per project
+- ChromaDB adds ~100MB to dependencies

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Literal
+from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 
@@ -12,6 +12,7 @@ class ToolName(str, Enum):
 
     FILE_SCANNER = "file_scanner"
     SUMMARIZER = "summarizer"
+    SMART_SEARCH = "smart_search"
 
 
 class InputRefType(str, Enum):
@@ -146,6 +147,27 @@ class SummarizeResult(BaseModel):
     was_compressed: bool
     model_used: str
     confidence: float = Field(default=0.9, ge=0.0, le=1.0)
+
+
+class SearchMatch(BaseModel):
+    """A single search match from ChromaDB."""
+
+    file_path: str
+    chunk_content: str
+    distance: float
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class SmartSearchResult(BaseModel):
+    """Result from smart_search subagent."""
+
+    query: str
+    matches: list[SearchMatch]
+    summary: str
+    summary_token_count: int
+    confidence: float = Field(default=0.8, ge=0.0, le=1.0)
+    collection_searched: str
+    total_matches: int
 
 
 # --- Health Check ---

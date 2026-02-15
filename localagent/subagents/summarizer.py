@@ -26,6 +26,9 @@ OLLAMA_TIMEOUT = 30.0  # seconds
 MAX_CHUNK_TOKENS = 4000
 LARGE_CONTENT_THRESHOLD = 50 * 1024  # 50KB
 
+# Character limit for DelegationResponse.summary schema
+MAX_SUMMARY_CHARS = 1500
+
 
 class SubagentUnavailableError(Exception):
     """Raised when the subagent's backing service is unavailable."""
@@ -47,19 +50,29 @@ def _truncate_to_tokens(text: str, max_tokens: int) -> str:
     return " ".join(words[:max_words]) + "..."
 
 
+def _truncate_to_chars(text: str, max_chars: int = MAX_SUMMARY_CHARS) -> str:
+    """Truncate text to max_chars, breaking at word boundary."""
+    if len(text) <= max_chars:
+        return text
+    truncated = text[: max_chars - 3]
+    last_space = truncated.rfind(" ")
+    if last_space > max_chars // 2:
+        truncated = truncated[:last_space]
+    return truncated + "..."
+
+
 def _build_summarization_prompt(content: str, max_tokens: int, context: str | None = None) -> str:
     """Build the prompt for summarization."""
-    prompt = f"""Summarize the following content in under {max_tokens} tokens, preserving key technical details.
+    # Calculate character limit (roughly 4 chars per token, capped at schema limit)
+    max_chars = min(max_tokens * 4, MAX_SUMMARY_CHARS - 100)  # Buffer for safety
 
-After summarizing, provide a confidence rating from 0.0 to 1.0:
-- 0.9-1.0: Complete understanding, captured all key points
-- 0.7-0.9: Good coverage, may have missed minor details
-- 0.5-0.7: Partial understanding, significant ambiguity
-- <0.5: Uncertain, content unclear or outside training
+    prompt = f"""Summarize the following content. STRICT LIMITS: under {max_tokens} tokens AND under {max_chars} characters. Be extremely concise.
 
 Format your response EXACTLY as:
-SUMMARY: <your summary>
+SUMMARY: <your concise summary here>
 CONFIDENCE: <0.0-1.0>
+
+Confidence guide: 0.9-1.0=captured all key points, 0.7-0.9=good coverage, 0.5-0.7=partial, <0.5=uncertain.
 
 """
     if context:
@@ -194,8 +207,8 @@ def summarize_content(
     """
     content_tokens = _estimate_tokens(content)
 
-    # If content is already under limit, return verbatim
-    if content_tokens <= max_tokens:
+    # If content is already under both token and character limits, return verbatim
+    if content_tokens <= max_tokens and len(content) <= MAX_SUMMARY_CHARS:
         return SummarizeResult(
             summary=content,
             token_count=content_tokens,
@@ -215,8 +228,9 @@ def summarize_content(
         response_text = _call_ollama(prompt, model)
         summary, confidence = _parse_llm_response(response_text)
 
-        # Ensure summary is within token limit
+        # Ensure summary is within token and character limits
         summary = _truncate_to_tokens(summary, max_tokens)
+        summary = _truncate_to_chars(summary)
         summary_tokens = _estimate_tokens(summary)
 
         return SummarizeResult(
@@ -231,6 +245,7 @@ def summarize_content(
         # Return a truncated version as fallback
         logger.warning("Ollama unavailable, returning truncated content as summary")
         summary = _truncate_to_tokens(content, max_tokens)
+        summary = _truncate_to_chars(summary)
         return SummarizeResult(
             summary=summary,
             token_count=_estimate_tokens(summary),
@@ -293,6 +308,7 @@ Section summaries:
         avg_confidence = 0.3
 
     final_summary = _truncate_to_tokens(final_summary, max_tokens)
+    final_summary = _truncate_to_chars(final_summary)
 
     return SummarizeResult(
         summary=final_summary,
