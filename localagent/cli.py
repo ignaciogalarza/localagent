@@ -225,79 +225,33 @@ def delete(project: str) -> None:
 
 
 # Template for CLAUDE.md instructions
-CLAUDE_MD_TEMPLATE = '''# LocalAgent - REQUIRED for Code Exploration
+CLAUDE_MD_TEMPLATE = '''# LocalAgent - REQUIRED
 
-This project uses LocalAgent for semantic code search. You MUST use these tools.
+**RULE: Use `smart_search` before reading files.** This saves ~99% tokens.
 
-## IMPORTANT: Use Tools First, Not File Reading
+## Tools
 
-**DO NOT** scan directories or read multiple files to understand the codebase.
-**DO** use `smart_search` first. It returns exactly what you need in ~100x fewer tokens.
+```python
+# Find code, understand features, locate implementations
+smart_search(query="how does auth work", project="{project}")
 
-This is a deliberate trade-off: semantic search + summarization is more efficient than reading raw files. Trust the tools.
+# List project files
+scan_files(patterns=["**/*.py"], root="{root}")
 
-### Why This Matters
-
-| Approach | Tokens Used | Time |
-|----------|-------------|------|
-| Read files to find auth code | ~100,000 | Slow |
-| `smart_search("authentication")` | ~800 | Fast |
-
-When you read files directly, you waste tokens and context window. The search index already knows where everything is.
-
-## Required Workflow
-
-1. **Need to understand something?** → `smart_search(query="...")`
-2. **Need to find where X is?** → `smart_search(query="where is X implemented")`
-3. **Need project structure?** → `scan_files(patterns=["**/*.py"])`
-4. **Need one specific file?** → `summarize_file(path="...")` or Read tool
-
-Only use the Read tool AFTER you know exactly which file and lines to read.
-
-## MCP Tools
-
-### `smart_search` - Use This First
-```
-smart_search(query="how does caching work", project="{project}", top_k=5)
+# Summarize one file
+summarize_file(path="/path/to/file.py")
 ```
 
-Returns relevant code chunks with file paths, line numbers, and AI summary. Use this for:
-- Understanding how features work
-- Finding where something is implemented
-- Exploring unfamiliar code
-- Answering questions about the codebase
+## Workflow
 
-### `scan_files` - Project Structure
-```
-scan_files(patterns=["*.py", "*.ts"], root="{root}")
-```
-
-Returns file list with summary. Use for understanding project layout.
-
-### `summarize_file` - Single File Overview
-```
-summarize_file(path="/absolute/path/to/file.py")
-```
-
-Returns AI summary of one file. Use when you need to understand a specific file.
-
-## Examples
-
-| User Request | Correct Action |
-|--------------|----------------|
-| "How does auth work?" | `smart_search(query="authentication implementation")` |
-| "Fix the login bug" | `smart_search(query="login")` then Read specific file |
-| "Add a new endpoint" | `smart_search(query="API endpoints")` to find patterns first |
-| "What's in this project?" | `scan_files` + `smart_search(query="project overview")` |
+1. `smart_search` first → get file paths + line numbers
+2. Read only the specific lines you need
 
 ## DO NOT
 
-- Read all files in a directory to "explore"
-- Use Glob/Grep extensively before trying smart_search
-- Skip the tools because you "want to see the raw code"
-- Ignore these instructions
-
-The tools exist to make you faster and more efficient. Use them.
+- Read/scan directories to "explore" the codebase
+- Use Glob/Grep before trying smart_search
+- Bypass these tools - they exist for efficiency
 '''
 
 
